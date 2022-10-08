@@ -1,4 +1,5 @@
 from datetime import date, datetime
+import logging
 
 airlines = {
     # ICAO  IATA  airline-name
@@ -33,6 +34,8 @@ airlines = {
     "CSN": ("CZ", "China Southern Airlines"),
     "RON": ("ON", "Naruu Airlines"),
     "MXD": ("OD", "Malindo Air"),
+    "TRF": ("TOLL", "Toll Priority"),
+    "TXF": ("TOLL", "Toll Priority"),
 }
 
 class Aircraft:
@@ -63,10 +66,10 @@ class Aircraft:
             self.helicopter = self.velocity < 100 and self.baro_altitude < 500
         except:
             self.helicopter = False
-            print('EXCEPT HELI', self)
+            logging.warning('failure in helicopter logic', self)
 
         try:
-            airline = airlines[self.callsign[:3]]
+            airline = airlines[self.callsign[:3].upper()]
             self.flightNumber = airline[0] + self.callsign[3:].rstrip()
             self.airline = airline[1]
         except KeyError:

@@ -7,8 +7,28 @@ import pickle
 from pathlib import Path
 import sys
 import os
+import argparse
+import logging
+
 import webpage
 from aircraft import Aircraft
+
+
+logging.basicConfig(
+    filename='planes.log', 
+    format='%(asctime)s %(levelname)s: %(message)s',
+    level=logging.INFO,
+    )
+
+logging.info('********************************* STARTUP')
+
+
+parser = argparse.ArgumentParser('Planes over Western suburbs')
+parser.add_argument('--noweb', '-n', 
+    dest='web', action='store_const',
+    const=False, default='True',
+    help='dont push pages to webserver')
+args = parser.parse_args()
 
 # curl "https://petercorke:opensky123@opensky-network.org/api/states/all?lamin=-27.53534&lamax=-27.44830&lomin=152.89735&lomax=153.03248"
 
@@ -22,12 +42,11 @@ if not pickle_file.exists():
     pickle_file = Path("~/planes.pickle").expanduser()
 
 
-
 if __name__ == "__main__":
 
     credentials = os.getenv('OPENSKY')
     if credentials is None:
-        print('setup envariable OPENSKY as username:password')
+        logging.error('setup envariable OPENSKY as username:password')
         sys.exit(1)
 
     pause = 90
@@ -49,7 +68,7 @@ if __name__ == "__main__":
                 allplanes = data[4]
             else:
                 allplanes = planes_today.copy()
-        print("loaded state from ", str(pickle_file))
+        logging.info("loaded state from " + str(pickle_file))
     except:
         # no state file
         planes_today = []
@@ -57,7 +76,7 @@ if __name__ == "__main__":
         perday = []
         today = date.today()
         allplanes = []
-        print("initialize state")
+        logging.info("initialize state")
 
     # planes_today: a list of Aircraft instances
     # perday: a list of tuples (number, date)
@@ -74,7 +93,7 @@ if __name__ == "__main__":
 
         if date.today() > today:
             # a new day, roll the data logs
-            print('******** new day *********')
+            logging.info('********************************* new day')
 
             total_for_the_day = len(planes_today)
             planes_today = [] # empty the list of planes
@@ -83,26 +102,35 @@ if __name__ == "__main__":
             today = date.today()
             changes = True
             webpage.generate(planes_today, last10, perday, allplanes)
-            webpage.upload()
+            if args.web:
+                webpage.upload()
+
+                try:
+                    exit = os.system('scp planes.log sg:/home/u41-iqh6n5pf7kxl/www/petercorke.com/www')
+                    if exit != 0:
+                        logging.error('logfile upload failed, scp error', exit)
+                except:
+                    logging.error('logfile upload failed, system failed')
 
 
         # get the state vector from OpenSky, check request quota
         if test_data is None:
             try:
-                response = requests.get(url)
-            except requests.exceptions.ConnectionError, except requests.exceptions.Timeout::
-                print('connection/timeout error')
+                response = requests.get(url, timeout=5)
+            #except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+            except BaseException as err:
+                logging.warning(f"requests.get failed: {err=}, {type(err)=}")
                 continue
             if response.status_code == 429:
                 retry = int(response.headers['X-Rate-Limit-Retry-After-Seconds']) / 3600.0
-                print(f"too many requests to OpenSky, retry after {retry:.2f} hours")
+                logging.warning(f"too many requests to OpenSky, retry after {retry:.2f} hours")
                 continue
             else:
                 if not once:
                     try:
-                        print(f"OpenSky requests remaining: {response.headers['X-Rate-Limit-Remaining']}")
+                        logging.warning(f"OpenSky requests remaining: {response.headers['X-Rate-Limit-Remaining']}")
                     except:
-                        print('cant read header')
+                        logging.warning('cant read header')
                 json_text = response.text
         else:
             json_text = test_data
@@ -113,14 +141,14 @@ if __name__ == "__main__":
         try:
             jsondata = json.loads(json_text)
         except json.JSONDecodeError:
-            print('JSON decode fail', json_text)
+            logging.warning('JSON decode fail ' + "|".join(json_text.split()))
             continue
 
         try:
             states = jsondata['states']
         except KeyError:
             # some request error
-            print('JSON no state data', json_text)
+            logging.warning('JSON data has no state ' + json_text)
             continue
 
         if states is None:
@@ -133,53 +161,53 @@ if __name__ == "__main__":
             if plane.on_ground:
                 # probs a helicopter
                 # alt < 500m
-                print(' x on ground')
+                logging.info(' x on ground')
                 continue
 
-            print('\n', datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ":: ", plane)
+            logging.info('\n', datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ":: ", plane)
 
             if plane.airline == "":
                 # not a known airline
-                print(' x unknown airline')
+                logging.info(' x unknown airline')
                 continue
 
             try:
                 if plane.baro_altitude is not None and plane.baro_altitude > 5000:
                     # flying over, not on approach or departure to BNE
-                    print(' x too low')
+                    logging.info(' x too low')
                     continue
 
                 if plane.vertical_rate < 4:
                     # not climbing
-                    print(' x not climbing')
+                    logging.info(' x not climbing')
                     continue
 
                 if plane.true_track < 180:
                     # heading east, landing from the south
-                    print(' x going east')
+                    logging.info(' x going east')
                     continue
 
                 if plane.callsign in [p.callsign for p in planes_today[:5]]:
                     # seen recently
-                    print(' x seen previously')
+                    logging.info(' x seen previously')
                     continue
 
                 planes_today.insert(0, plane)
                 last10.insert(0, plane)
                 last10 = last10[:10]
                 allplanes.insert(0, plane)
-                print(' + candidate')
+                logging.info(' + candidate')
                 changes = True
 
             except TypeError:
-                print('** failure in decision tree')
+                logging.info('** failure in decision tree')
                 continue
 
         # save the state
         with open(pickle_file, "wb") as fp:
             pickle.dump([planes_today, last10, perday, today, allplanes], fp)
 
-        if changes:
+        if changes and args.web:
             webpage.generate(planes_today, last10, perday, allplanes)
             webpage.upload()
 

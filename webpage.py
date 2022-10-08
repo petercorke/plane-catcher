@@ -1,5 +1,6 @@
 from datetime import datetime
 import os
+import logging
 
 css = r'''
     <style>
@@ -227,12 +228,12 @@ def generate(planes_today, last10, perday, allplanes):
 
     print(template, file=fp)
     fp.close()
-    print("web page written")
+    logging.debug("web page written")
 
 def upload():
     try:
         exit = os.system('scp planes.html sg:/home/u41-iqh6n5pf7kxl/www/petercorke.com/www')
         if exit != 0:
-            print('scp error', exit)
+            logging.error('webpage upload failed, scp error', exit)
     except:
-        print('scp failed')
+        logging.error('webpage upload failed, system failed')
