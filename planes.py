@@ -111,7 +111,7 @@ if __name__ == "__main__":
                 webpage.upload()
 
                 try:
-                    exit = os.system('scp planes.log sg:/home/u41-iqh6n5pf7kxl/www/petercorke.com/www')
+                    exit = os.system('scp -q planes.log sg:/home/u41-iqh6n5pf7kxl/www/petercorke.com/www')
                     if exit != 0:
                         logging.error('logfile upload failed, scp error', exit)
                 except:
