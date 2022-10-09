@@ -180,7 +180,6 @@ if __name__ == "__main__":
             continue
 
         if states is None:
-            nfail += 1
             continue
 
         # we have a valid state vector, process the reported aircraft
