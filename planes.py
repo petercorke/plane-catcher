@@ -113,7 +113,7 @@ if __name__ == "__main__":
                 try:
                     exit = os.system('scp -q planes.log sg:/home/u41-iqh6n5pf7kxl/www/petercorke.com/www')
                     if exit != 0:
-                        logging.error('logfile upload failed, scp error', exit)
+                        logging.error(f'logfile upload failed, scp error {exit}')
                 except:
                     logging.error('logfile upload failed, system failed')
 
@@ -169,7 +169,7 @@ if __name__ == "__main__":
                 logging.info(' x on ground')
                 continue
 
-            logging.info('\n', datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ":: ", plane)
+            logging.info(plane)
 
             if plane.airline == "":
                 # not a known airline

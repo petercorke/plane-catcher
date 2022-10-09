@@ -234,6 +234,6 @@ def upload():
     try:
         exit = os.system('scp -q planes.html sg:/home/u41-iqh6n5pf7kxl/www/petercorke.com/www')
         if exit != 0:
-            logging.error('webpage upload failed, scp error', exit)
+            logging.error(f'webpage upload failed, scp error {exit}')
     except:
         logging.error('webpage upload failed, system failed')
