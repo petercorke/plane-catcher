@@ -14,15 +14,7 @@ import webpage
 from aircraft import Aircraft
 
 
-logging.basicConfig(
-    filename='planes.log', 
-    format='%(asctime)s %(levelname)s: %(message)s',
-    level=logging.INFO,
-    )
-
-logging.info('********************************* STARTUP')
-
-
+# parse command line arguments
 parser = argparse.ArgumentParser('Planes over Western suburbs')
 parser.add_argument('--noweb', '-n', 
     dest='web', action='store_const',
@@ -32,7 +24,24 @@ parser.add_argument('--progress', '-p',
     dest='progress', action='store_const',
     const=True, default=False,
     help='display # during every sleep')
+parser.add_argument('--verbose', '-v',
+    dest='verbose', action='store_const',
+    const=True, default=False,
+    help='send log output to stdout')
 args = parser.parse_args()
+
+# setup logging
+if args.verbose:
+    logfilename = None
+else:
+    logfilename = 'planes.log'
+logging.basicConfig(
+    filename=logfilename, 
+    format='%(asctime)s %(levelname)s: %(message)s',
+    level=logging.INFO,
+    )
+
+logging.info('********************************* STARTUP')
 
 # curl "https://petercorke:opensky123@opensky-network.org/api/states/all?lamin=-27.53534&lamax=-27.44830&lomin=152.89735&lomax=153.03248"
 
@@ -86,23 +95,36 @@ if __name__ == "__main__":
     # perday: a list of tuples (number, date)
     # today: date instance, current date
 
-    webpage.generate(planes_today, last10, perday, allplanes)
+    webpage.generate(planes_today, last10, perday, allplanes, 100)
 
     once = False
+    nfail = 0
+
     while True:
+
+        # periodically update the webpage if server has been down for a while
+        if nfail > 0 and nfail % 20 == 0:
+            # a lot of failures, update the web page
+            webpage.generate(planes_today, last10, perday, allplanes, nfail)
+            if args.web:
+                webpage.upload()
+
+        # sleep for a bit, to reduce the number of Open-Sky requests
         if once:
             time.sleep(pause)  # pause on subsequent loops
             if args.progress:
                 print('#', end='', file=sys.stdout)
                 sys.stdout.flush()
 
+        # deal with a new day, reset some variables, record daily stats
         if date.today() > today:
-            # a new day, roll the data logs
             logging.info('********************************* new day')
 
             total_for_the_day = len(planes_today)
             planes_today = [] # empty the list of planes
-            perday.insert(0, (total_for_the_day, today))
+            perday.insert(0, (total_for_the_day, today, nfail))
+
+            nfail = 0
 
             today = date.today()
             changes = True
@@ -118,28 +140,27 @@ if __name__ == "__main__":
                     logging.error('logfile upload failed, system failed')
 
 
-        # get the state vector from OpenSky, check request quota
-        if test_data is None:
-            try:
-                response = requests.get(url, timeout=5)
-            #except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
-            except BaseException as err:
-                logging.warning(f"requests.get failed: {err=}, {type(err)=}")
-                continue
-            if response.status_code == 429:
-                retry = int(response.headers['X-Rate-Limit-Retry-After-Seconds']) / 3600.0
-                logging.warning(f"too many requests to OpenSky, retry after {retry:.2f} hours")
-                continue
-            else:
-                if not once:
-                    try:
-                        logging.warning(f"OpenSky requests remaining: {response.headers['X-Rate-Limit-Remaining']}")
-                    except:
-                        logging.warning('cant read header')
-                json_text = response.text
-        else:
-            json_text = test_data
+        # attempt to get the state vector from OpenSky
+        try:
+            response = requests.get(url, timeout=5)
+        #except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+        except BaseException as err:
+            logging.warning(f"requests.get failed: {err=}, {type(err)=}")
+            nfail += 1
+            continue
 
+        # check request quota, print number remaining on first loop
+        if response.status_code == 429:
+            retry = int(response.headers['X-Rate-Limit-Retry-After-Seconds']) / 3600.0
+            logging.warning(f"too many requests to OpenSky, retry after {retry:.2f} hours")
+            continue
+        else:
+            if not once:
+                try:
+                    logging.info(f"OpenSky requests remaining: {response.headers['X-Rate-Limit-Remaining']}")
+                except:
+                    logging.warning('cant read header')
+            json_text = response.text
         once = True
 
         # attempt to decode the state vector
@@ -147,6 +168,7 @@ if __name__ == "__main__":
             jsondata = json.loads(json_text)
         except json.JSONDecodeError:
             logging.warning('JSON decode fail ' + "|".join(json_text.split()))
+            nfail += 1
             continue
 
         try:
@@ -154,11 +176,14 @@ if __name__ == "__main__":
         except KeyError:
             # some request error
             logging.warning('JSON data has no state ' + json_text)
+            nfail += 1
             continue
 
         if states is None:
+            nfail += 1
             continue
 
+        # we have a valid state vector, process the reported aircraft
         changes = False
         for state in states:
             plane = Aircraft(state)
@@ -213,11 +238,5 @@ if __name__ == "__main__":
             pickle.dump([planes_today, last10, perday, today, allplanes], fp)
 
         if changes and args.web:
-            webpage.generate(planes_today, last10, perday, allplanes)
+            webpage.generate(planes_today, last10, perday, allplanes, nfail)
             webpage.upload()
-
-
-    # day = date.fromtimestamp(plane.time)
-    # if day > today:
-    #     roll_the_day()
-    #     today = day

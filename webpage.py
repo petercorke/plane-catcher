@@ -65,7 +65,7 @@ def am_pm(i):
     else:
         return str(i - 12) + "am"
 
-def generate(planes_today, last10, perday, allplanes):
+def generate(planes_today, last10, perday, allplanes, nfail):
 
     # ---------------------------- by the hour
     by_the_hour = r'''<table>
@@ -109,13 +109,22 @@ def generate(planes_today, last10, perday, allplanes):
   <tr>
     <th>Number of planes</th> 
     <th>Date</th>
+    <th>Server downtime</th>
   </tr>
 '''
-    for number, date in perday[:7]:
+    for data in perday[:7]:
+        number = data[0]
+        date = data[1]
+        if len(data) == 3:
+            failmins = f'{data[2]*1.5:.0f} mins'
+        else:
+            failmins = 'n/a'
+        # third element nfail recently added
         last7 += f'''
     <tr>
       <td>{number}</td>
       <td>{date.strftime("%A (%-d %b)")}</td>
+      <td>{failmins}</td>
 '''
     last7 += r'''
   </table>'''
@@ -140,6 +149,15 @@ def generate(planes_today, last10, perday, allplanes):
     nightplanes += r'''
   </table>'''
 
+    # server down
+    if nfail > 2:
+        server_down = f'''
+        <p style="color:red;">Some aircraft today may not have been recorded. The Open-Sky network server which 
+        provides our data has been down for {nfail*1.5:.0f} minutes so far today</p>
+        '''
+    else:
+        server_down = ''
+
     # ---------------------------- create page
     fp = open('planes.html', 'w')
 
@@ -161,7 +179,9 @@ def generate(planes_today, last10, perday, allplanes):
     a track over the University of Queensland, Toowong and Mount Coot-tha.</p>
 
     <h2>So far today</h2>
-    {len(planes_today)} aircraft have taken off from Brisbane airport and flown low and loud over the Western suburbs.
+    <p>{len(planes_today)} aircraft have taken off from Brisbane airport and flown low and loud over the Western suburbs.</p>
+
+    {server_down}
 
     <h3>By the hour</h3>
     {by_the_hour}
@@ -172,7 +192,7 @@ def generate(planes_today, last10, perday, allplanes):
     <h2>Last 7 days</h2>
     {last7}
 
-    <h2>Recent planes at an unreasonable hour</h2>
+    <h2>Why we need a curfew</h2>
     {nightplanes}
 
     <h2>Wind direction</h2>
