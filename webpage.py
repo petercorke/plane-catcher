@@ -232,7 +232,7 @@ def generate(planes_today, last10, perday, allplanes):
 
 def upload():
     try:
-        exit = os.system('scp planes.html sg:/home/u41-iqh6n5pf7kxl/www/petercorke.com/www')
+        exit = os.system('scp -q planes.html sg:/home/u41-iqh6n5pf7kxl/www/petercorke.com/www')
         if exit != 0:
             logging.error('webpage upload failed, scp error', exit)
     except:

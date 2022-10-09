@@ -28,6 +28,10 @@ parser.add_argument('--noweb', '-n',
     dest='web', action='store_const',
     const=False, default='True',
     help='dont push pages to webserver')
+parser.add_argument('--progress', '-p',
+    dest='progress', action='store_const',
+    const=True, default=False,
+    help='display # during every sleep')
 args = parser.parse_args()
 
 # curl "https://petercorke:opensky123@opensky-network.org/api/states/all?lamin=-27.53534&lamax=-27.44830&lomin=152.89735&lomax=153.03248"
@@ -88,8 +92,9 @@ if __name__ == "__main__":
     while True:
         if once:
             time.sleep(pause)  # pause on subsequent loops
-            print('#', end='', file=sys.stdout)
-            sys.stdout.flush()
+            if args.progress:
+                print('#', end='', file=sys.stdout)
+                sys.stdout.flush()
 
         if date.today() > today:
             # a new day, roll the data logs
